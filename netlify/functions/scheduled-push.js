@@ -15,7 +15,11 @@ export const handler = schedule("30 0 * * *", async () => {
     process.env.VAPID_PRIVATE_KEY
   )
 
-  const store = getStore("rumah-bersih")
+  const store = getStore({
+    name: "rumah-bersih",
+    siteID: process.env.NETLIFY_SITE_ID,
+    token: process.env.NETLIFY_TOKEN
+  })
   const [subs, zone] = await Promise.all([
     store.get('subscriptions', { type: 'json' }),
     store.get('zone', { type: 'json' })
