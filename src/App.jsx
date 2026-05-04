@@ -273,18 +273,60 @@ function ZoneTab() {
 }
 
 // ─────────────────────────────────────────
-// APPROVAL TAB (Admin)
+// LIGHTBOX
 // ─────────────────────────────────────────
-function ApprovalTab() {
+function Lightbox({ src, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: '20px'
+      }}
+    >
+      <img
+        src={src}
+        alt="foto barang"
+        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: '8px', objectFit: 'contain' }}
+        onClick={e => e.stopPropagation()}
+      />
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute', top: '16px', right: '16px',
+          background: 'rgba(255,255,255,0.15)', border: 'none',
+          color: 'white', fontSize: '20px', width: '36px', height: '36px',
+          borderRadius: '50%', cursor: 'pointer'
+        }}
+      >✕</button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// PHOTO LIST (shared by Admin + ART)
+// ─────────────────────────────────────────
+function PhotoList({ isAdmin, artId }) {
   const [photos, setPhotos] = useState([])
-  const [filter, setFilter] = useState('pending')
+  const [filter, setFilter] = useState(isAdmin ? 'pending' : 'approved')
   const [loading, setLoading] = useState(true)
+  const [lightbox, setLightbox] = useState(null)
 
   const load = useCallback(async () => {
     const res = await api('get-photos', { status: 'all' })
-    if (res.ok) setPhotos(res.photos)
+    if (res.ok) {
+      const list = isAdmin ? res.photos : res.photos.filter(p => p.artId === artId)
+      setPhotos(list)
+    }
     setLoading(false)
-  }, [])
+  }, [isAdmin, artId])
 
   useEffect(() => { load() }, [load])
 
@@ -303,33 +345,47 @@ function ApprovalTab() {
 
   return (
     <div className="content">
+      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+
       <div className="filter-row">
-        <button className={`filter-btn ${filter === 'pending' ? 'active' : ''}`} onClick={() => setFilter('pending')}>
-          Menunggu {pendingCount > 0 && `(${pendingCount})`}
-        </button>
+        {isAdmin && (
+          <button className={`filter-btn ${filter === 'pending' ? 'active' : ''}`} onClick={() => setFilter('pending')}>
+            Menunggu {pendingCount > 0 && `(${pendingCount})`}
+          </button>
+        )}
         <button className={`filter-btn ${filter === 'approved' ? 'active' : ''}`} onClick={() => setFilter('approved')}>
           Sudah disetujui
         </button>
-        <button className={`filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-          Semua
-        </button>
+        {isAdmin && (
+          <button className={`filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+            Semua
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">{filter === 'pending' ? '✨' : '📭'}</div>
           <div className="empty-text">{filter === 'pending' ? 'Semua foto sudah disetujui!' : 'Belum ada foto'}</div>
+          <div className="empty-sub">{!isAdmin && filter === 'approved' ? 'Foto yang sudah dikategorikan admin muncul di sini' : ''}</div>
         </div>
       )}
 
       {filtered.map(photo => (
         <div className="photo-card" key={photo.id}>
-          {photo.photoData && <img src={photo.photoData} alt="foto barang" />}
+          {photo.photoData && (
+            <img
+              src={photo.photoData}
+              alt="foto barang"
+              style={{ cursor: 'zoom-in' }}
+              onClick={() => setLightbox(photo.photoData)}
+            />
+          )}
           <div className="photo-card-body">
             <div className="photo-meta">
               <strong>{photo.artName}</strong> · {new Date(photo.timestamp).toLocaleDateString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
             </div>
-            {photo.status === 'pending' ? (
+            {isAdmin && photo.status === 'pending' ? (
               <div className="bucket-row">
                 {['simpan','jual','buang','donasi'].map(cat => (
                   <button key={cat} className={`bucket-btn ${cat}`} onClick={() => handleApprove(photo.id, cat)}>
@@ -338,15 +394,24 @@ function ApprovalTab() {
                 ))}
               </div>
             ) : (
-              <div className={`approved-pill bucket-btn ${catColor[photo.category]}`} style={{display:'inline-flex'}}>
-                {catLabel[photo.category]}
-              </div>
+              photo.category && (
+                <div className={`approved-pill bucket-btn ${catColor[photo.category]}`} style={{display:'inline-flex'}}>
+                  {catLabel[photo.category]}
+                </div>
+              )
             )}
           </div>
         </div>
       ))}
     </div>
   )
+}
+
+// ─────────────────────────────────────────
+// APPROVAL TAB (Admin)
+// ─────────────────────────────────────────
+function ApprovalTab() {
+  return <PhotoList isAdmin={true} />
 }
 
 // ─────────────────────────────────────────
@@ -743,11 +808,13 @@ function ARTDash({ user, onLogout }) {
       <TopBar user={user} onLogout={onLogout} />
       {tab === 'today' && <TodayTab user={user} />}
       {tab === 'upload' && <UploadTab user={user} />}
+      {tab === 'foto' && <PhotoList isAdmin={false} artId={user.id} />}
       {tab === 'points' && <PointsTab user={user} />}
       <nav className="bottom-nav">
         {[
           { id: 'today', icon: '✅', label: 'Tugas' },
           { id: 'upload', icon: '📷', label: 'Upload' },
+          { id: 'foto', icon: '🗂', label: 'Foto' },
           { id: 'points', icon: '💰', label: 'Poin' },
         ].map(n => (
           <button key={n.id} className={`nav-btn ${tab === n.id ? 'active' : ''}`} onClick={() => setTab(n.id)}>
