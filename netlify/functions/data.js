@@ -16,7 +16,11 @@ export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS }
   if (event.httpMethod !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405)
 
-  const store = getStore("rumah-bersih")
+  const store = getStore({
+    name: "rumah-bersih",
+    siteID: process.env.NETLIFY_SITE_ID,
+    token: process.env.NETLIFY_TOKEN
+  })
   const body = JSON.parse(event.body || '{}')
   const { action } = body
 
