@@ -38,8 +38,8 @@ export async function handler(event) {
         if (pins[role] !== pin) return json({ ok: false, error: 'PIN salah' })
         const names = {
           admin: 'Admin',
-          art1:  process.env.ART1_NAME || 'ART 1',
-          art2:  process.env.ART2_NAME || 'ART 2',
+          art1:  process.env.ART1_NAME || 'Ika',
+          art2:  process.env.ART2_NAME || 'Lia',
         }
         return json({ ok: true, name: names[role] })
       }
