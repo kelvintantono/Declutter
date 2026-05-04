@@ -14,7 +14,11 @@ export async function handler(event) {
     return { statusCode: 400, headers: CORS, body: JSON.stringify({ ok: false, error: 'Missing artId or subscription' }) }
   }
 
-  const store = getStore("rumah-bersih")
+  const store = getStore({
+    name: "rumah-bersih",
+    siteID: process.env.NETLIFY_SITE_ID,
+    token: process.env.NETLIFY_TOKEN
+  })
   const subs = await store.get('subscriptions', { type: 'json' }) || []
 
   // Replace existing subscription for this ART
