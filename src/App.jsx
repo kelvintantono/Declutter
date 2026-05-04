@@ -89,8 +89,8 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
 
   const roles = [
-    { id: 'art1', icon: '🧹', name: 'ART 1', sub: 'Asisten Rumah Tangga' },
-    { id: 'art2', icon: '🧹', name: 'ART 2', sub: 'Asisten Rumah Tangga' },
+    { id: 'art1', icon: '🧹', name: 'Ika', sub: 'Asisten Rumah Tangga' },
+    { id: 'art2', icon: '🧹', name: 'Lia', sub: 'Asisten Rumah Tangga' },
   ]
 
   const handleLogin = async () => {
@@ -493,8 +493,8 @@ function SummaryTab() {
         <div className="loading">Memuat data...</div>
       ) : (
         <>
-          <ARTBlock name="ART 1" data={data1} />
-          <ARTBlock name="ART 2" data={data2} />
+          <ARTBlock name="Ika" data={data1} />
+          <ARTBlock name="Lia" data={data2} />
         </>
       )}
     </div>
