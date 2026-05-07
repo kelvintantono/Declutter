@@ -159,6 +159,23 @@ export async function handler(event) {
         return json({ ok: true })
       }
 
+      // MONTHLY PHOTO COUNT
+      case 'get-monthly-photo-count': {
+        const { artId, year, month } = body
+        const photos = await store.get('photos', { type: 'json' }) || []
+        const prefix = `${year}-${String(month).padStart(2,'0')}`
+        const dayMap = {}
+        photos
+          .filter(p => p.artId === artId && p.timestamp.startsWith(prefix))
+          .forEach(p => {
+            const day = p.timestamp.split('T')[0]
+            dayMap[day] = (dayMap[day] || 0) + 1
+          })
+        const daysHit = Object.values(dayMap).filter(count => count >= 10).length
+        const totalPhotos = Object.values(dayMap).reduce((a,b) => a+b, 0)
+        return json({ ok: true, daysHit, totalPhotos, dayMap })
+      }
+
       default:
         return json({ ok: false, error: `Unknown action: ${action}` }, 400)
     }
