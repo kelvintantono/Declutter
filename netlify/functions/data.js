@@ -110,7 +110,7 @@ export async function handler(event) {
         results.forEach((data, i) => {
           const d = i + 1
           const date = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-          const bothDone = !!(data?.task1 && data?.task2)
+          const bothDone = !!(data?.task2) // task1 removed from UI
           if (bothDone) completedDays++
           days.push({ d, date, task1: data?.task1 || false, task2: data?.task2 || false, bothDone })
         })
@@ -159,21 +159,37 @@ export async function handler(event) {
         return json({ ok: true })
       }
 
-      // MONTHLY PHOTO COUNT
+      // MONTHLY PHOTO COUNT (approved only) + full points calculation
       case 'get-monthly-photo-count': {
         const { artId, year, month } = body
         const photos = await store.get('photos', { type: 'json' }) || []
         const prefix = `${year}-${String(month).padStart(2,'0')}`
+        const daysInMonth = new Date(year, month, 0).getDate()
+
+        // Count approved photos per day
         const dayMap = {}
         photos
-          .filter(p => p.artId === artId && p.timestamp.startsWith(prefix))
+          .filter(p => p.artId === artId && p.status === 'approved' && p.timestamp.startsWith(prefix))
           .forEach(p => {
             const day = p.timestamp.split('T')[0]
             dayMap[day] = (dayMap[day] || 0) + 1
           })
-        const daysHit = Object.values(dayMap).filter(count => count >= 10).length
-        const totalPhotos = Object.values(dayMap).reduce((a,b) => a+b, 0)
-        return json({ ok: true, daysHit, totalPhotos, dayMap })
+
+        // Build day-by-day result
+        const days = Array.from({ length: daysInMonth }, (_, i) => {
+          const d = i + 1
+          const date = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+          const count = dayMap[date] || 0
+          return { d, date, count, hit: count >= 10 }
+        })
+
+        const daysHit = days.filter(d => d.hit).length
+        const totalApproved = Object.values(dayMap).reduce((a,b) => a+b, 0)
+        const earned = daysHit * 5000
+        const bonus = daysHit === daysInMonth ? 50000 : 0
+        const total = earned + bonus
+
+        return json({ ok: true, daysHit, daysInMonth, totalApproved, earned, bonus, total, days, dayMap })
       }
 
       default:
