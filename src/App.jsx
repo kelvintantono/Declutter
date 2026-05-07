@@ -449,8 +449,19 @@ function SummaryTab() {
     else setMonth(m => m+1)
   }
 
-  const ARTBlock = ({ name, data }) => {
+  const ARTBlock = ({ name, data, artId }) => {
     if (!data) return null
+    const [photoCount, setPhotoCount] = useState(null)
+
+    useEffect(() => {
+      api('get-monthly-photo-count', { artId, year, month }).then(res => {
+        if (res.ok) setPhotoCount(res)
+      })
+    }, [artId])
+
+    const photoEarned = photoCount ? photoCount.daysHit * 5000 : 0
+    const grandTotal = data.total + photoEarned
+
     return (
       <div className="art-summary">
         <div className="art-sum-header">
@@ -460,22 +471,26 @@ function SummaryTab() {
         <div className="stat-row">
           <div className="stat-box">
             <div className="stat-val">{data.completedDays}</div>
-            <div className="stat-label">Hari Selesai</div>
+            <div className="stat-label">Hari Checklist</div>
           </div>
           <div className="stat-box">
-            <div className="stat-val">{formatRp(data.earned)}</div>
-            <div className="stat-label">Insentif Harian</div>
+            <div className="stat-val">{photoCount ? photoCount.daysHit : '...'}</div>
+            <div className="stat-label">Hari 10 Foto</div>
+          </div>
+          <div className="stat-box" style={{gridColumn:'1/-1'}}>
+            <div className="stat-val">{formatRp(data.earned + photoEarned)}</div>
+            <div className="stat-label">Total Insentif (checklist + foto)</div>
           </div>
         </div>
-        <div className={`bonus-card ${data.bonus > 0 ? 'unlocked' : 'locked'} mt-8`} style={{marginTop:'8px'}}>
+        <div className={`bonus-card ${data.bonus > 0 ? 'unlocked' : 'locked'}`} style={{marginTop:'8px'}}>
           <div className="bonus-text">
             {data.bonus > 0 ? '🎉 Bonus full bulan!' : `Bonus (perlu ${data.daysInMonth} hari penuh)`}
           </div>
           <div className="bonus-amount">{formatRp(data.bonus)}</div>
         </div>
         <div className="total-row">
-          <div className="total-label">Total Bulan Ini</div>
-          <div className="total-val">{formatRp(data.total)}</div>
+          <div className="total-label">Grand Total Bulan Ini</div>
+          <div className="total-val">{formatRp(grandTotal + data.bonus)}</div>
         </div>
       </div>
     )
@@ -493,8 +508,8 @@ function SummaryTab() {
         <div className="loading">Memuat data...</div>
       ) : (
         <>
-          <ARTBlock name="Ika" data={data1} />
-          <ARTBlock name="Lia" data={data2} />
+          <ARTBlock name="Ika" data={data1} artId="art1" />
+          <ARTBlock name="Lia" data={data2} artId="art2" />
         </>
       )}
     </div>
@@ -595,11 +610,30 @@ function TodayTab({ user }) {
 // ─────────────────────────────────────────
 // UPLOAD TAB (ART)
 // ─────────────────────────────────────────
+const DAILY_PHOTO_TARGET = 10
+
 function UploadTab({ user }) {
   const [preview, setPreview] = useState(null)
   const [compressed, setCompressed] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState(false)
+  const [todayCount, setTodayCount] = useState(0)
+  const [loadingCount, setLoadingCount] = useState(true)
+
+  useEffect(() => {
+    const loadCount = async () => {
+      const res = await api('get-photos', { status: 'all' })
+      if (res.ok) {
+        const today = todayStr()
+        const count = res.photos.filter(p =>
+          p.artId === user.id && p.timestamp.startsWith(today)
+        ).length
+        setTodayCount(count)
+      }
+      setLoadingCount(false)
+    }
+    loadCount()
+  }, [user.id, done])
 
   const handleFile = async (e) => {
     const file = e.target.files[0]
@@ -620,12 +654,39 @@ function UploadTab({ user }) {
     setDone(true)
   }
 
+  const pct = Math.min(100, Math.round((todayCount / DAILY_PHOTO_TARGET) * 100))
+  const hit = todayCount >= DAILY_PHOTO_TARGET
+
   return (
     <div className="content">
+
+      {/* DAILY COUNTER */}
       <div className="card">
-        <div className="card-title">Upload Foto Barang</div>
-        <div className="upload-note">
-          📸 Foto barang yang ingin disortir. Admin akan menentukan kategorinya: Simpan, Jual, Buang, atau Donasi.
+        <div className="card-title">Target Foto Harian</div>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+          <div>
+            <span style={{fontSize:'28px', fontWeight:'900', color: hit ? 'var(--green)' : 'var(--text)', letterSpacing:'-1px'}}>
+              {loadingCount ? '...' : todayCount}
+            </span>
+            <span style={{fontSize:'16px', fontWeight:'600', color:'var(--text3)'}}>/{DAILY_PHOTO_TARGET} foto</span>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:'13px', fontWeight:'700', color: hit ? 'var(--green)' : 'var(--accent)'}}>
+              {hit ? '🎉 Target tercapai!' : `${DAILY_PHOTO_TARGET - todayCount} foto lagi`}
+            </div>
+            <div style={{fontSize:'11px', color:'var(--text3)', marginTop:'2px'}}>
+              {hit ? '+Rp5.000 hari ini' : 'Rp5.000 jika 10 foto'}
+            </div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div style={{background:'var(--surface2)', borderRadius:'4px', height:'6px', overflow:'hidden'}}>
+          <div style={{
+            background: hit ? 'var(--green)' : 'var(--accent)',
+            height:'100%', borderRadius:'4px',
+            width: `${pct}%`,
+            transition:'width 0.4s'
+          }}/>
         </div>
       </div>
 
@@ -638,12 +699,22 @@ function UploadTab({ user }) {
         </div>
       )}
 
+      {hit && (
+        <div className="earned-banner">
+          <div>
+            <div className="earned-label">🎉 Target 10 foto tercapai!</div>
+            <div style={{fontSize:'12px',color:'var(--green)',marginTop:'2px'}}>Rp5.000 sudah masuk hitungan hari ini.</div>
+          </div>
+          <div className="earn-val">+{formatRp(5000)}</div>
+        </div>
+      )}
+
       <label style={{cursor:'pointer'}}>
         <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFile} />
         {preview ? (
           <img src={preview} alt="preview" className="upload-preview" />
         ) : (
-          <div className="upload-area">
+          <div className={`upload-area ${hit ? '' : ''}`}>
             <div className="upload-icon">📷</div>
             <div className="upload-text">Ambil foto atau pilih dari galeri</div>
             <div className="upload-sub">Foto akan dikompresi otomatis</div>
@@ -664,6 +735,11 @@ function UploadTab({ user }) {
           </button>
         </div>
       )}
+
+      <div className="upload-note">
+        📸 Foto barang yang ingin disortir. Admin akan menentukan: Simpan, Jual, Buang, atau Donasi.
+        Target 10 foto per hari = Rp5.000.
+      </div>
     </div>
   )
 }
