@@ -465,38 +465,40 @@ function PhotoList({ isAdmin, artId }) {
         </div>
       )}
 
-      {filtered.map(photo => (
-        <div className="photo-card" key={photo.id}>
-          {photo.photoData && (
-            <img
-              src={photo.photoData}
-              alt="foto barang"
-              style={{ cursor: 'zoom-in' }}
-              onClick={() => setLightbox(photo.photoData)}
-            />
-          )}
-          <div className="photo-card-body">
-            <div className="photo-meta">
-              <strong>{photo.artName}</strong> · {new Date(photo.timestamp).toLocaleDateString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
-            </div>
-            {isAdmin && photo.status === 'pending' ? (
-              <div className="bucket-row">
-                {['simpan','jual','buang','donasi'].map(cat => (
-                  <button key={cat} className={`bucket-btn ${cat}`} onClick={() => handleApprove(photo.id, cat)}>
-                    {catLabel[cat]}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              photo.category && (
-                <div className={`approved-pill bucket-btn ${catColor[photo.category]}`} style={{display:'inline-flex'}}>
-                  {catLabel[photo.category]}
-                </div>
-              )
+      <div>
+        {filtered.map(photo => (
+          <div className="photo-card" key={photo.id}>
+            {photo.photoData && (
+              <img
+                src={photo.photoData}
+                alt="foto barang"
+                style={{ cursor: 'zoom-in' }}
+                onClick={() => setLightbox(photo.photoData)}
+              />
             )}
+            <div className="photo-card-body">
+              <div className="photo-meta">
+                <strong>{photo.artName}</strong> · {new Date(photo.timestamp).toLocaleDateString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+              </div>
+              {isAdmin && photo.status === 'pending' ? (
+                <div className="bucket-row">
+                  {['simpan','jual','buang','donasi'].map(cat => (
+                    <button key={cat} className={`bucket-btn ${cat}`} onClick={() => handleApprove(photo.id, cat)}>
+                      {catLabel[cat]}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                photo.category && (
+                  <div className={`approved-pill bucket-btn ${catColor[photo.category]}`} style={{display:'inline-flex'}}>
+                    {catLabel[photo.category]}
+                  </div>
+                )
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
@@ -894,7 +896,7 @@ function AdminDash({ user, onLogout }) {
       {tab === 'zone' && <ZoneTab />}
       {tab === 'approve' && <ApprovalTab />}
       {tab === 'summary' && <SummaryTab />}
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" >
         {[
           { id: 'zone', icon: '🗺', label: 'Zona' },
           { id: 'approve', icon: '📸', label: 'Foto', badge: pendingCount },
