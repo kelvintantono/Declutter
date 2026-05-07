@@ -311,6 +311,100 @@ function Lightbox({ src, onClose }) {
 }
 
 // ─────────────────────────────────────────
+// PHOTO LIST — Admin: approval view | ART: grouped by category
+// ─────────────────────────────────────────
+const CAT_LABELS = {
+  simpan: '🏠 Simpan',
+  jual: '💰 Jual',
+  buang: '🗑 Buang',
+  donasi: '🤝 Donasi',
+  pending: '🕐 Belum Ditentukan'
+}
+const CAT_COLORS = { simpan: 'blue', jual: 'yellow', buang: 'red', donasi: 'green', pending: '' }
+
+function ARTPhotoTab({ user }) {
+  const [photos, setPhotos] = useState([])
+  const [activecat, setActivecat] = useState('pending')
+  const [loading, setLoading] = useState(true)
+  const [lightbox, setLightbox] = useState(null)
+
+  useEffect(() => {
+    api('get-photos', { status: 'all' }).then(res => {
+      if (res.ok) setPhotos(res.photos.filter(p => p.artId === user.id))
+      setLoading(false)
+    })
+  }, [user.id])
+
+  const categories = ['pending', 'simpan', 'jual', 'buang', 'donasi']
+
+  const getPhotos = (cat) => cat === 'pending'
+    ? photos.filter(p => p.status === 'pending')
+    : photos.filter(p => p.status === 'approved' && p.category === cat)
+
+  const filtered = getPhotos(activecat)
+
+  if (loading) return <div className="content"><div className="loading">Memuat...</div></div>
+
+  return (
+    <div className="content">
+      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+
+      {/* Category tabs */}
+      <div style={{display:'flex', gap:'6px', flexWrap:'wrap'}}>
+        {categories.map(cat => {
+          const count = getPhotos(cat).length
+          return (
+            <button
+              key={cat}
+              onClick={() => setActivecat(cat)}
+              style={{
+                padding:'7px 12px', borderRadius:'20px', border:'none',
+                fontSize:'11px', fontWeight:'700', cursor:'pointer',
+                background: activecat === cat
+                  ? (cat === 'pending' ? 'var(--surface2)' : `var(--${CAT_COLORS[cat]}-dim, var(--surface2))`)
+                  : 'var(--surface)',
+                color: activecat === cat
+                  ? (cat === 'pending' ? 'var(--text2)' : `var(--${CAT_COLORS[cat]}, var(--text2))`)
+                  : 'var(--text3)',
+                border: activecat === cat ? '1px solid currentColor' : '1px solid var(--border)',
+                opacity: count === 0 ? 0.4 : 1
+              }}
+            >
+              {CAT_LABELS[cat]} {count > 0 && `(${count})`}
+            </button>
+          )
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-icon">{activecat === 'pending' ? '✨' : '📭'}</div>
+          <div className="empty-text">
+            {activecat === 'pending' ? 'Tidak ada foto yang menunggu' : `Tidak ada foto kategori ${CAT_LABELS[activecat]}`}
+          </div>
+        </div>
+      )}
+
+      {filtered.map(photo => (
+        <div className="photo-card" key={photo.id}>
+          {photo.photoData && (
+            <img src={photo.photoData} alt="foto barang" style={{cursor:'zoom-in'}} onClick={() => setLightbox(photo.photoData)} />
+          )}
+          <div className="photo-card-body">
+            <div className="photo-meta">
+              {new Date(photo.timestamp).toLocaleDateString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})}
+            </div>
+            <div className={`approved-pill bucket-btn ${CAT_COLORS[photo.category || 'pending']}`} style={{display:'inline-flex'}}>
+              {CAT_LABELS[photo.category || 'pending']}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
 // PHOTO LIST (shared by Admin + ART)
 // ─────────────────────────────────────────
 function PhotoList({ isAdmin, artId }) {
@@ -517,24 +611,40 @@ function SummaryTab() {
 }
 
 // ─────────────────────────────────────────
-// TODAY TAB (ART)
+// TUGAS TAB (ART) — checklist + upload merged
 // ─────────────────────────────────────────
+const DAILY_PHOTO_TARGET = 10
+
 function TodayTab({ user }) {
-  const [checklist, setChecklist] = useState({ task1: false, task2: false })
+  const [checklist, setChecklist] = useState({ task2: false })
   const [zone, setZone] = useState(null)
   const [notifDone, setNotifDone] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const [compressed, setCompressed] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadDone, setUploadDone] = useState(false)
+  const [todayCount, setTodayCount] = useState(0)
+  const [loadingCount, setLoadingCount] = useState(true)
+
+  const loadAll = async () => {
+    const [cRes, zRes, pRes] = await Promise.all([
+      api('get-checklist', { artId: user.id, date: todayStr() }),
+      api('get-zone'),
+      api('get-photos', { status: 'all' })
+    ])
+    if (cRes.ok) setChecklist(cRes.checklist)
+    if (zRes.ok) setZone(zRes.zone)
+    if (pRes.ok) {
+      const today = todayStr()
+      const count = pRes.photos.filter(p => p.artId === user.id && p.timestamp.startsWith(today)).length
+      setTodayCount(count)
+    }
+    setLoadingCount(false)
+  }
 
   useEffect(() => {
-    const load = async () => {
-      const [cRes, zRes] = await Promise.all([
-        api('get-checklist', { artId: user.id, date: todayStr() }),
-        api('get-zone')
-      ])
-      if (cRes.ok) setChecklist(cRes.checklist)
-      if (zRes.ok) setZone(zRes.zone)
-    }
-    load()
+    loadAll()
     setNotifDone(localStorage.getItem(`notif_${user.id}`) === '1')
   }, [user.id])
 
@@ -556,8 +666,29 @@ function TodayTab({ user }) {
     }
   }
 
-  const bothDone = checklist.task1 && checklist.task2
-  const dateLabel = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const data = await compressImage(file)
+    setPreview(data)
+    setCompressed(data)
+    setUploadDone(false)
+  }
+
+  const handleSubmit = async () => {
+    if (!compressed) return
+    setUploading(true)
+    await api('add-photo', { artId: user.id, artName: user.name, photoData: compressed })
+    setUploading(false)
+    setPreview(null)
+    setCompressed(null)
+    setUploadDone(true)
+    setTodayCount(n => n + 1)
+  }
+
+  const pct = Math.min(100, Math.round((todayCount / DAILY_PHOTO_TARGET) * 100))
+  const hitTarget = todayCount >= DAILY_PHOTO_TARGET
+  const dateLabel = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long' })
 
   return (
     <div className="content">
@@ -576,169 +707,72 @@ function TodayTab({ user }) {
         <div className="today-zone">📍 {zone?.name || 'Zona belum diatur'}</div>
       </div>
 
+      {/* CHECKLIST */}
       <div className="card">
-        <div className="card-title">Tugas Hari Ini · {saving ? '⏳' : '✓'}</div>
-        {[
-          { key: 'task1', name: 'Sortir barang', desc: 'Pegang satu per satu → Simpan / Jual / Buang / Donasi. Tidak ada yang ditunda.' },
-          { key: 'task2', name: 'Tidak ada tumpukan', desc: 'Pastikan tidak ada barang yang ditaruh di atas barang lain — tanpa kecuali.' }
-        ].map(t => (
-          <div className="task-item" key={t.key} onClick={() => toggle(t.key)}>
-            <div className={`task-check ${checklist[t.key] ? 'done' : ''}`}>
-              {checklist[t.key] ? '✓' : ''}
-            </div>
-            <div>
-              <div className={`task-main ${checklist[t.key] ? 'done' : ''}`}>{t.name}</div>
-              <div className="task-desc">{t.desc}</div>
-            </div>
+        <div className="card-title">Checklist · {saving ? '⏳' : '✓'}</div>
+        <div className="task-item" onClick={() => toggle('task2')}>
+          <div className={`task-check ${checklist.task2 ? 'done' : ''}`}>
+            {checklist.task2 ? '✓' : ''}
           </div>
-        ))}
+          <div>
+            <div className={`task-main ${checklist.task2 ? 'done' : ''}`}>Tidak ada tumpukan</div>
+            <div className="task-desc">Tidak ada barang yang ditaruh di atas barang lain — tanpa kecuali.</div>
+          </div>
+        </div>
       </div>
 
-      {bothDone && (
-        <div className="earned-banner">
-          <div>
-            <div className="earned-label">🎉 Tugas selesai hari ini!</div>
-            <div style={{fontSize:'12px',color:'var(--green)',marginTop:'2px'}}>Kamu telah menyelesaikan semua tugas.</div>
-          </div>
-          <div className="earned-val">+ {formatRp(5000)}</div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────
-// UPLOAD TAB (ART)
-// ─────────────────────────────────────────
-const DAILY_PHOTO_TARGET = 10
-
-function UploadTab({ user }) {
-  const [preview, setPreview] = useState(null)
-  const [compressed, setCompressed] = useState(null)
-  const [uploading, setUploading] = useState(false)
-  const [done, setDone] = useState(false)
-  const [todayCount, setTodayCount] = useState(0)
-  const [loadingCount, setLoadingCount] = useState(true)
-
-  useEffect(() => {
-    const loadCount = async () => {
-      const res = await api('get-photos', { status: 'all' })
-      if (res.ok) {
-        const today = todayStr()
-        const count = res.photos.filter(p =>
-          p.artId === user.id && p.timestamp.startsWith(today)
-        ).length
-        setTodayCount(count)
-      }
-      setLoadingCount(false)
-    }
-    loadCount()
-  }, [user.id, done])
-
-  const handleFile = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const data = await compressImage(file)
-    setPreview(data)
-    setCompressed(data)
-    setDone(false)
-  }
-
-  const handleSubmit = async () => {
-    if (!compressed) return
-    setUploading(true)
-    await api('add-photo', { artId: user.id, artName: user.name, photoData: compressed })
-    setUploading(false)
-    setPreview(null)
-    setCompressed(null)
-    setDone(true)
-  }
-
-  const pct = Math.min(100, Math.round((todayCount / DAILY_PHOTO_TARGET) * 100))
-  const hit = todayCount >= DAILY_PHOTO_TARGET
-
-  return (
-    <div className="content">
-
-      {/* DAILY COUNTER */}
+      {/* PHOTO UPLOAD */}
       <div className="card">
-        <div className="card-title">Target Foto Harian</div>
+        <div className="card-title">Upload Foto Barang</div>
+
+        {/* Counter */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
           <div>
-            <span style={{fontSize:'28px', fontWeight:'900', color: hit ? 'var(--green)' : 'var(--text)', letterSpacing:'-1px'}}>
-              {loadingCount ? '...' : todayCount}
+            <span style={{fontSize:'26px', fontWeight:'900', color: hitTarget ? 'var(--green)' : 'var(--text)', letterSpacing:'-1px'}}>
+              {loadingCount ? '…' : todayCount}
             </span>
-            <span style={{fontSize:'16px', fontWeight:'600', color:'var(--text3)'}}>/{DAILY_PHOTO_TARGET} foto</span>
+            <span style={{fontSize:'14px', fontWeight:'600', color:'var(--text3)'}}>/{DAILY_PHOTO_TARGET} foto</span>
           </div>
           <div style={{textAlign:'right'}}>
-            <div style={{fontSize:'13px', fontWeight:'700', color: hit ? 'var(--green)' : 'var(--accent)'}}>
-              {hit ? '🎉 Target tercapai!' : `${DAILY_PHOTO_TARGET - todayCount} foto lagi`}
+            <div style={{fontSize:'12px', fontWeight:'700', color: hitTarget ? 'var(--green)' : 'var(--accent)'}}>
+              {hitTarget ? '🎉 Target tercapai!' : `${DAILY_PHOTO_TARGET - todayCount} foto lagi`}
             </div>
-            <div style={{fontSize:'11px', color:'var(--text3)', marginTop:'2px'}}>
-              {hit ? '+Rp5.000 hari ini' : 'Rp5.000 jika 10 foto'}
+            <div style={{fontSize:'10px', color:'var(--text3)', marginTop:'1px'}}>
+              {hitTarget ? '+Rp5.000 hari ini' : 'Target: 10 foto = Rp5.000'}
             </div>
           </div>
         </div>
-        {/* Progress bar */}
-        <div style={{background:'var(--surface2)', borderRadius:'4px', height:'6px', overflow:'hidden'}}>
-          <div style={{
-            background: hit ? 'var(--green)' : 'var(--accent)',
-            height:'100%', borderRadius:'4px',
-            width: `${pct}%`,
-            transition:'width 0.4s'
-          }}/>
+        <div style={{background:'var(--surface2)', borderRadius:'4px', height:'5px', overflow:'hidden', marginBottom:'14px'}}>
+          <div style={{background: hitTarget ? 'var(--green)' : 'var(--accent)', height:'100%', borderRadius:'4px', width:`${pct}%`, transition:'width 0.4s'}}/>
         </div>
-      </div>
 
-      {done && (
-        <div className="earned-banner">
-          <div>
-            <div className="earned-label">✅ Foto berhasil dikirim!</div>
-            <div style={{fontSize:'12px',color:'var(--green)',marginTop:'2px'}}>Admin akan segera meninjau dan mengkategorikan.</div>
-          </div>
-        </div>
-      )}
-
-      {hit && (
-        <div className="earned-banner">
-          <div>
-            <div className="earned-label">🎉 Target 10 foto tercapai!</div>
-            <div style={{fontSize:'12px',color:'var(--green)',marginTop:'2px'}}>Rp5.000 sudah masuk hitungan hari ini.</div>
-          </div>
-          <div className="earn-val">+{formatRp(5000)}</div>
-        </div>
-      )}
-
-      <label style={{cursor:'pointer'}}>
-        <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFile} />
-        {preview ? (
-          <img src={preview} alt="preview" className="upload-preview" />
-        ) : (
-          <div className={`upload-area ${hit ? '' : ''}`}>
-            <div className="upload-icon">📷</div>
-            <div className="upload-text">Ambil foto atau pilih dari galeri</div>
-            <div className="upload-sub">Foto akan dikompresi otomatis</div>
+        {uploadDone && (
+          <div className="earned-banner" style={{marginBottom:'12px'}}>
+            <div className="earned-label">✅ Foto terkirim!</div>
           </div>
         )}
-      </label>
 
-      {preview && (
-        <div className="btn-row" style={{gap:'8px'}}>
-          <button className="btn-secondary" onClick={() => { setPreview(null); setCompressed(null) }}>Batal</button>
-          <button
-            className="btn-primary"
-            onClick={handleSubmit}
-            disabled={uploading}
-            style={{opacity: uploading ? 0.6 : 1}}
-          >
-            {uploading ? 'Mengirim...' : 'Kirim ke Admin →'}
-          </button>
-        </div>
-      )}
+        <label style={{cursor:'pointer', display:'block', marginBottom: preview ? '12px' : '0'}}>
+          <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFile} />
+          {preview ? (
+            <img src={preview} alt="preview" className="upload-preview" />
+          ) : (
+            <div className="upload-area">
+              <div className="upload-icon">📷</div>
+              <div className="upload-text">Ambil foto atau pilih dari galeri</div>
+              <div className="upload-sub">Foto akan dikompresi otomatis</div>
+            </div>
+          )}
+        </label>
 
-      <div className="upload-note">
-        📸 Foto barang yang ingin disortir. Admin akan menentukan: Simpan, Jual, Buang, atau Donasi.
-        Target 10 foto per hari = Rp5.000.
+        {preview && (
+          <div className="btn-row" style={{gap:'8px', marginTop:'12px'}}>
+            <button className="btn-secondary" onClick={() => { setPreview(null); setCompressed(null) }}>Batal</button>
+            <button className="btn-primary" onClick={handleSubmit} disabled={uploading} style={{opacity: uploading ? 0.6 : 1}}>
+              {uploading ? 'Mengirim...' : 'Kirim ke Admin →'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -883,13 +917,11 @@ function ARTDash({ user, onLogout }) {
     <div className="app">
       <TopBar user={user} onLogout={onLogout} />
       {tab === 'today' && <TodayTab user={user} />}
-      {tab === 'upload' && <UploadTab user={user} />}
-      {tab === 'foto' && <PhotoList isAdmin={false} artId={user.id} />}
+      {tab === 'foto' && <ARTPhotoTab user={user} />}
       {tab === 'points' && <PointsTab user={user} />}
       <nav className="bottom-nav">
         {[
           { id: 'today', icon: '✅', label: 'Tugas' },
-          { id: 'upload', icon: '📷', label: 'Upload' },
           { id: 'foto', icon: '🗂', label: 'Foto' },
           { id: 'points', icon: '💰', label: 'Poin' },
         ].map(n => (
