@@ -781,7 +781,7 @@ function TodayTab({ user }) {
 }
 
 // ─────────────────────────────────────────
-// POINTS TAB (ART)
+// POINTS TAB (ART) — based on approved photos
 // ─────────────────────────────────────────
 function PointsTab({ user }) {
   const now = new Date()
@@ -792,7 +792,7 @@ function PointsTab({ user }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await api('get-monthly-summary', { artId: user.id, year, month })
+    const res = await api('get-monthly-photo-count', { artId: user.id, year, month })
     if (res.ok) setData(res)
     setLoading(false)
   }, [user.id, year, month])
@@ -823,8 +823,8 @@ function PointsTab({ user }) {
         <>
           <div className="points-hero">
             <div className="ph-left">
-              <div className="ph-val">{data.completedDays}</div>
-              <div className="ph-label">Hari Selesai / {data.daysInMonth}</div>
+              <div className="ph-val">{data.daysHit}</div>
+              <div className="ph-label">Hari Target / {data.daysInMonth}</div>
             </div>
             <div className="ph-right">
               <div className="ph-rp">{formatRp(data.earned)}</div>
@@ -835,39 +835,45 @@ function PointsTab({ user }) {
           <div className={`bonus-card ${data.bonus > 0 ? 'unlocked' : 'locked'}`}>
             <div>
               <div className="bonus-text">
-                {data.bonus > 0 ? '🎉 Bonus full bulan!' : `Bonus full bulan (butuh ${data.daysInMonth - data.completedDays} hari lagi)`}
+                {data.bonus > 0
+                  ? '🎉 Bonus full bulan!'
+                  : `Bonus (butuh ${data.daysInMonth - data.daysHit} hari lagi)`}
               </div>
             </div>
             <div className="bonus-amount">{formatRp(50000)}</div>
           </div>
 
-          {data.total > 0 && (
-            <div className="total-row">
-              <div className="total-label">Total Bulan Ini</div>
-              <div className="total-val">{formatRp(data.total)}</div>
-            </div>
-          )}
+          <div className="total-row">
+            <div className="total-label">Total Bulan Ini</div>
+            <div className="total-val">{formatRp(data.total)}</div>
+          </div>
 
           <div className="card">
-            <div className="card-title">Kalender Bulan Ini</div>
+            <div className="card-title">Kalender — {MONTHS_ID[month-1]} {year}</div>
+            <div style={{fontSize:'10px', color:'var(--text3)', marginBottom:'10px'}}>
+              ✓ = 10 foto disetujui · angka = jumlah foto disetujui hari itu
+            </div>
             <div className="calendar-grid">
-              {Array.from({ length: data.daysInMonth }, (_, i) => {
-                const day = data.days[i]
-                const d = i + 1
+              {data.days.map(({ d, hit, count }) => {
                 const isToday = isCurrentMonth && d === todayDate
                 const isFuture = isCurrentMonth && d > todayDate
                 let cls = 'cal-day'
                 if (isFuture) cls += ' future'
-                else if (day.bothDone) cls += ' done'
+                else if (hit) cls += ' done'
+                else if (count > 0) cls += ' missed'
                 else cls += ' missed'
                 if (isToday) cls += ' today-cell'
                 return (
-                  <div key={d} className={cls} title={`${d} ${MONTHS_ID[month-1]}`}>
-                    {day.bothDone ? '✓' : d}
+                  <div key={d} className={cls} title={`${d} ${MONTHS_ID[month-1]}: ${count} foto`}>
+                    {hit ? '✓' : isFuture ? d : count > 0 ? count : d}
                   </div>
                 )
               })}
             </div>
+          </div>
+
+          <div style={{fontSize:'11px', color:'var(--text3)', textAlign:'center', paddingBottom:'4px'}}>
+            Total {data.totalApproved} foto disetujui bulan ini
           </div>
         </>
       )}
@@ -941,8 +947,24 @@ function ARTDash({ user, onLogout }) {
 // Root
 // ─────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null)
-  if (!user) return <Login onLogin={setUser} />
-  if (user.role === 'admin') return <AdminDash user={user} onLogout={() => setUser(null)} />
-  return <ARTDash user={user} onLogout={() => setUser(null)} />
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rumah_bersih_user')
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  })
+
+  const handleLogin = (u) => {
+    localStorage.setItem('rumah_bersih_user', JSON.stringify(u))
+    setUser(u)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('rumah_bersih_user')
+    setUser(null)
+  }
+
+  if (!user) return <Login onLogin={handleLogin} />
+  if (user.role === 'admin') return <AdminDash user={user} onLogout={handleLogout} />
+  return <ARTDash user={user} onLogout={handleLogout} />
 }
